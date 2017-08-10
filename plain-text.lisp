@@ -4,6 +4,7 @@
 (cl:defpackage #:plain-text
   (:nicknames #:ptxt)
   (:use #:common-lisp #:rutilsx)
+  (:local-nicknames (#:re #:ppcre))
   (:import-from #:lquery #:$)
   (:export #:extract))
 
