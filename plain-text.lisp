@@ -113,15 +113,17 @@
 
 (defun extract (html-text)
   (with ((html ($ (lquery:initialize html-text)))
-         (body ($ html "body"))
+         (body ($ html "body" (first)))
          (scores #h())
          (max 0)
          (winner nil))
     ($ body "script" (detach))
+    ($ body "noscript" (detach))
     ($ body "style" (detach))
     ($ body "object" (detach))
     ($ body "form" (detach))
     ($ body "iframe" (detach))
+    ($ body "aside" (detach))
     (dovec (p (concatenate 'vector
                            ($ body "p")
                            ($ body "div")
