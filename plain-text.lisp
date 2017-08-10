@@ -112,8 +112,8 @@
                             % (fmt "~%"))))
 
 (defun extract (html-text)
-  (with ((html ($ (lquery:initialize html-text)))
-         (body ($ html "body" (first)))
+  (with ((body-text (re:scan-to-strings "(?s:<body.*body>)" html-text))
+         (body ($ (lquery:initialize body-text)))
          (scores #h())
          (max 0)
          (winner nil))
@@ -158,8 +158,22 @@
         (:= max score
             winner node)))
     (fmt "~A~%~%~A"
-         (? ($ html "title" (text)) 0)
+         (with ((_ match (re:scan-to-strings "<title[^>]*>([^<]*)</title>"
+                                             html-text)))
+           (? match 0))
          (clean-text winner))))
+
+(defmethod plump:text ((node plump:nesting-node))
+  "Compiles all text nodes within the nesting-node into one string."
+  (with-output-to-string (stream)
+    (labels ((r (node)
+               (loop for child across (plump:children node)
+                     do (typecase child
+                          (plump:textual-node (write-string (plump:text child)
+                                                            stream))
+                          (plump:nesting-node (r child)))
+                        (write-string " " stream))))
+      (r node))))
 
 (defmethod plump:text ((node plump:comment))
   "")
