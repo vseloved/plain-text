@@ -16,22 +16,22 @@
    (mapcar ^(pair (lt %) (re:create-scanner (reduce 'strcat (rt %))
                                             :case-insensitive-mode t))
            '((:unlikely-candidates
-              '("banner|breadcrumbs|combx|comment|community|cover-wrap|disqus|"
-                "extra|foot|header|legends|menu|modal|related|remark|replies|"
-                "rss|shoutbox|sidebar|skyscraper|social|sponsor|supplemental|"
-                "ad-break|agegate|pagination|pager|popup|yom-remote|"
-                "popup|tweet|twitter"))
+              ("banner|breadcrumbs|button|combx|comment|community|cover-wrap|"
+               "disqus|extra|foot|header|legends|menu|menupop|menubutton|modal|"
+               "related|remark|replies|rss|shoutbox|sidebar|skyscraper|social|"
+               "sponsor|supplemental|ad-break|agegate|pagination|pager|popup|"
+               "yom-remote|popup|tweet|twitter"))
              (:ok-candidates
-              '("and|article|body|column|main|shadow"))
+              ("and|article|body|column|main|shadow"))
              (:positive
-              '("article|body|content|entry|h-?entry|main|page|pagination|post|"
-                "text|blog|story"))
+              ("article|body|content|entry|h-?entry|main|page|pagination|post|"
+               "text|blog|story"))
              (:negative
-              '("hidden|^hid$| hid$| hid |^hid |banner|combx|comment|com-|"
-                "contact|foot|footer|footnote|masthead|media|modal|"
-                "meta|outbrain|promo|related|scroll|shoutbox|sidebar|sponsor|"
-                "shopping|tags|tool|widget|print|archive|comment|discuss|"
-                "e[\\-]?mail|share|reply|all|login|sign|single|skyscraper"))))))
+              ("hidden|^hid$| hid$| hid |^hid |banner|combx|comment|com-|"
+               "contact|foot|footer|footnote|masthead|media|modal|"
+               "meta|outbrain|promo|related|scroll|shoutbox|sidebar|sponsor|"
+               "shopping|tags|tool|widget|print|archive|comment|discuss|"
+               "e[\\-]?mail|share|reply|all|login|sign|single|skyscraper"))))))
 
 ;;; patches to plump
 
@@ -65,7 +65,9 @@
 (defun node-score (node)
   (+ (case (mkeyw (node-name node))
        (:div 5)
+       (:p 5)
        (:blockquote 3)
+       (:li -1)
        (:form -3)
        (:th -5)
        (otherwise 0))
@@ -97,20 +99,57 @@
 
 ;;; extraction
 
+(defun uniqify-newlines (text)
+  (flet ((newlinep (char) (member char '(#\Newline #\Return #\Linefeed)))
+         (whitep (char) (member char '(#\Space #\Tab))))
+    (with-output-to-string (rez)
+      (let ((off 0))
+        (loop :for pos := (position-if #'newlinep text)
+                :then (position-if #'newlinep text :start off)
+              :while pos :do
+           (write-line (slice text off (position-if #'whitep text
+                                                    :end pos :from-end t))
+                       rez)
+           (:= off (position-if-not ^(or (newlinep %) (whitep %))
+                                    text :start pos))
+           :finally (write-line (slice text off)
+                                rez))))))
+
+(declaim (inline unlikely-candidate? possible-text-blocks))
+
+(defun unlikely-candidate? (node)
+  (let ((id+class (strcat (? ($ node (attr "id")) 0) " "
+                          (? ($ node (attr "class")) 0))))
+    (and (re:scan (? *regs* :unlikely-candidates) id+class)
+         (not (re:scan (? *regs* :ok-candidates) id+class)))))
+
+(defun possible-text-blocks (node)
+  (concatenate 'vector
+               ($ node "p")
+               ($ node "div")
+               ($ node "blockquote")
+               ($ node "a")
+               ($ node "li")
+               ($ node "th")
+               ($ node "td")
+               ($ node "h1")
+               ($ node "h2")
+               ($ node "h3")
+               ($ node "h4")
+               ($ node "h5")
+               ($ node "h6")))
+
 (defun clean-text (node)
   (if node
-      (-> ($ node (text) (node))
-          (re:regex-replace-all "<[^>]+>" % " ")
-          (re:regex-replace-all "^\\s+|\\s+$" % "")
-          (re:regex-replace-all " +" % " ")
-          (re:regex-replace-all (re:create-scanner
-                                 (fmt "\\s*[~C~C~C]+" #\Newline #\Return #\Linefeed)
-                                 :multi-line-mode t)
-                                % (fmt "~%"))
-          (re:regex-replace-all (re:create-scanner
-                                 (fmt "[~C~C~C]+\\s*" #\Newline #\Return #\Linefeed)
-                                 :multi-line-mode t)
-                                % (fmt "~%")))
+      (progn
+        (dovec (p (possible-text-blocks node))
+          (when (unlikely-candidate? p)
+            ($ p (detach))))
+        (-> ($ node (text) (node))
+            (re:regex-replace-all "<[^>]+>" % " ")
+            (string-trim '(#\Space #\Tab #\Newline #\Return #\Linefeed) %)
+            uniqify-newlines
+            (re:regex-replace-all " +" % " ")))
       ""))
 
 (defun extract (html-text)
@@ -127,27 +166,16 @@
            ($ body "form" (detach))
            ($ body "iframe" (detach))
            ($ body "aside" (detach))
-           (dovec (p (concatenate 'vector
-                                  ($ body "p")
-                                  ($ body "div")
-                                  ($ body "blockquote")
-                                  ($ body "h1")
-                                  ($ body "h2")
-                                  ($ body "h3")
-                                  ($ body "h4")
-                                  ($ body "h5")
-                                  ($ body "h6")))
+           (dovec (p (possible-text-blocks body))
              (when ($1 p (parents))
-               (with ((id+class (strcat (? ($ p (attr "id")) 0)
-                                        (? ($ p (attr "class")) 0)))
-                      (parents ($ p (parents)))
+               (with ((parents ($ p (parents)))
                       (parent (? parents 0))
                       (grandparent (when (> (length parents) 1) (? parents 1)))
-                      (text ($ p (text)))
+                      (text (? ($ p (text)) 0))
                       (score (+ 1 (count #\, text)
-                                (min 3 (floor (length text) 100)))))
-                 (when (and (re:scan (? *regs* :unlikely-candidates) id+class)
-                            (not (re:scan (? *regs* :ok-candidates) id+class)))
+                                (min 3 (floor (count #\Space text :test-not 'eql)
+                                              100)))))
+                 (when (unlikely-candidate? p)
                    ($ p (detach))
                    (return))
                  (unless (in# parent scores)
