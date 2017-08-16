@@ -74,18 +74,15 @@
       (class-score node)))
 
 (defun class-score (node)
-  (let ((score 0))
-    (when-it (? ($ node (attr "class")) 0)
-      (when (re:scan (? *regs* :negative) it)
+  (let ((score 0)
+        (id+class (fmt "~A ~A"
+                       (? ($ node (attr "id")) 0)
+                       (? ($ node (attr "class")) 0))))
+      (when (re:scan (? *regs* :negative) id+class)
         (:- score 25))
-      (when (re:scan (? *regs* :positive) it)
+      (when (re:scan (? *regs* :positive) id+class)
         (:+ score 25))
-      (when-it (? ($ node (attr "id")) 0)
-        (when (re:scan (? *regs* :negative) it)
-          (:- score 25))
-        (when (re:scan (? *regs* :positive) it)
-          (:+ score 25))))
-    score))
+     score))
 
 (defun link-density (node)
   (let ((links ($ node "a"))
@@ -132,6 +129,7 @@
                ($ node "li")
                ($ node "th")
                ($ node "td")
+               ($ node "article")
                ($ node "h1")
                ($ node "h2")
                ($ node "h3")
@@ -140,7 +138,7 @@
                ($ node "h6")))
 
 (defun clean-text (node)
-  (if node
+  (if nodeq
       (progn
         (dovec (p (possible-text-blocks node))
           (when (unlikely-candidate? p)
@@ -172,10 +170,12 @@
                       (parent (? parents 0))
                       (grandparent (when (> (length parents) 1) (? parents 1)))
                       (text (? ($ p (text)) 0))
-                      (score (+ 1 (count #\, text)
-                                (min 3 (floor (count #\Space text :test-not 'eql)
-                                              100)))))
-                 (when (unlikely-candidate? p)
+                      (char-count (count #\Space text :test-not 'eql))
+                      (score (+ (count #\, text)
+                                (min 3 (floor char-count 100))
+                                1)))
+                 (when (or (zerop char-count)
+                           (unlikely-candidate? p))
                    ($ p (detach))
                    (return))
                  (unless (in# parent scores)
@@ -185,6 +185,8 @@
                    (unless (in# grandparent scores)
                      (:= (? scores grandparent) (node-score grandparent)))
                    (:+ (? scores grandparent) (/ score 2))))))
+           ;; (dotable (node score scores)
+           ;;   (print (list score node (ignore-errors (slice (? ($ node (text)) 0) 0 1000)))))
            (dotable (node score scores)
              (when (> score max)
                (:= max score
