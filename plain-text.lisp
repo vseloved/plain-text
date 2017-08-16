@@ -138,7 +138,7 @@
                ($ node "h6")))
 
 (defun clean-text (node)
-  (if nodeq
+  (if node
       (progn
         (dovec (p (possible-text-blocks node))
           (when (unlikely-candidate? p)
@@ -185,8 +185,6 @@
                    (unless (in# grandparent scores)
                      (:= (? scores grandparent) (node-score grandparent)))
                    (:+ (? scores grandparent) (/ score 2))))))
-           ;; (dotable (node score scores)
-           ;;   (print (list score node (ignore-errors (slice (? ($ node (text)) 0) 0 1000)))))
            (dotable (node score scores)
              (when (> score max)
                (:= max score
