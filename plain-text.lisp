@@ -189,12 +189,14 @@
              (when (> score max)
                (:= max score
                    winner node)))
-           (fmt "~A~%~%~A"
+           (values
+            (fmt "~A~%~%~A"
                 (with ((_ match (re:scan-to-strings "<title[^>]*>([^<]*)</title>"
                                                     html-text)))
                   (if match (? match 0) ""))
-                (clean-text winner)))
-         ""))
+                (clean-text winner))
+            body))
+         (values "" nil)))
 
 (defmethod plump:text ((node plump:nesting-node))
   "Compiles all text nodes within the nesting-node into one string."
