@@ -38,22 +38,22 @@
 (plump:define-tag-dispatcher (plump:comment plump:*tag-dispatchers*
                               plump:*xml-tags* plump:*html-tags*)
     (name)
-    (and (<= 3 (length name))
-         (string= name "!--" :end1 3))
-  (plump:make-comment
-   plump:*root*
-   (plump:decode-entities
-    (if (and (ends-with "--" name)
-             (char= (or (plump:peek) #\!) #\>))
-        (prog1 (if (> (length name) 5)
-                   (subseq name 3 (- (length name) 2))
-                   "")
-          (plump:advance))
-        (prog1 (concatenate
-                'string (subseq name 3)
-                (plump:consume-until
-                 (plump:make-matcher (is "-->"))))
-          (plump:advance-n 3))))))
+  (when (and (<= 3 (length name))
+             (string= name "!--" :end1 3))
+    (plump:make-comment
+     plump:*root*
+     (plump:decode-entities
+      (if (and (ends-with "--" name)
+               (char= (or (plump:peek) #\!) #\>))
+          (prog1 (if (> (length name) 5)
+                     (subseq name 3 (- (length name) 2))
+                     "")
+            (plump:advance))
+          (prog1 (concatenate
+                  'string (subseq name 3)
+                  (plump:consume-until
+                   (plump:make-matcher (is "-->"))))
+            (plump:advance-n 3)))))))
 
 
 
